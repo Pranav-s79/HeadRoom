@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+outputs/data/*.npy
+outputs/data/*.csv
+outputs/models/*.joblib
+outputs/figures/*.png
+outputs/reports/*.csv
+outputs/reports/*.json
+outputs/reports/final_report.md
