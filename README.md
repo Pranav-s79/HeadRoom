@@ -94,14 +94,25 @@ python run_dashboard.py
 Equivalent direct command:
 
 ```bash
-streamlit run thermalguard_cal/dashboard.py
+streamlit run dashboard/app.py
 ```
 
 Dashboard views:
 
 - Simulation Replay: 4x4 chip heatmap over time, sensor locations, selected
-  core, scheduler decision, point/quantile/conformal risk heatmaps, and peak
-  temperature trace.
+  core, scheduler decision, point/quantile/conformal risk heatmaps, selected-core
+  detail table, plain-English decision explanation, jump controls, Demo Mode,
+  and peak temperature trace. Beginner mode is enabled by default.
+- Guided Tutorial: project walkthrough for reviewers learning the simulator,
+  prediction target, schedulers, conformal layer, and main caveats.
+- Pitch Prep: concise interview/portfolio pitch, supported claims, unsupported
+  claims, and likely reviewer questions.
+- Data Flow: how generated workloads become features, labels, trained models,
+  scheduler rollouts, reports, figures, and dashboard views.
+- Metric Explainer: plain-English definitions for peak temperature, hotspot
+  counts, coverage, selected-core coverage, and drift.
+- Result Verdict: conservative dashboard summary of what the current metrics do
+  and do not prove.
 - Results Explorer: scheduler metrics, model metrics, coverage metrics, and
   executive figure.
 - Calibration View: conformal correction, calibration sample count, and
@@ -115,6 +126,26 @@ Dashboard views:
 
 Simulation Replay can optionally write flat CSV replay logs under
 `outputs/replays/` from the dashboard.
+
+Recommended dashboard review flow:
+
+1. Run `python run_dashboard.py`.
+2. Open `Guided Tutorial`.
+3. Open `Simulation Replay`, keep Beginner mode enabled, and use the jump
+   buttons to inspect a decision, hotspot, or conformal-bound violation.
+4. Use `Pitch Prep`, `Metric Explainer`, and `Result Verdict` before claiming
+   project results externally.
+
+Written dashboard and portfolio notes are available under:
+
+- `docs/TUTORIAL.md`
+- `docs/DASHBOARD_GUIDE.md`
+- `docs/METRICS_GLOSSARY.md`
+- `docs/PITCH_PREP.md`
+- `outputs/portfolio_assets/portfolio_summary.md`
+- `outputs/portfolio_assets/recruiter_summary.md`
+- `outputs/portfolio_assets/supported_claims.md`
+- `outputs/portfolio_assets/unsupported_claims.md`
 
 ## Visual Results
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    app_path = Path(__file__).resolve().parent / "thermalguard_cal" / "dashboard.py"
+    app_path = Path(__file__).resolve().parent / "dashboard" / "app.py"
     command = [sys.executable, "-m", "streamlit", "run", str(app_path)]
     raise SystemExit(subprocess.call(command))
 

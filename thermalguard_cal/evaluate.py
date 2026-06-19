@@ -213,6 +213,7 @@ def evaluate_scheduler(
     selected_violations = None
     avg_bound = None
     avg_actual = None
+    avg_conservatism = None
     coverage_rows: list[dict[str, Any]] = []
 
     if scheduler.name == "conformal_upper_bound":
@@ -220,13 +221,22 @@ def evaluate_scheduler(
         selected_actuals_arr = np.array(selected_actuals, dtype=float)
         all_bounds_arr = np.array(all_candidate_bounds, dtype=float)
         all_actuals_arr = np.array(all_candidate_actuals, dtype=float)
+        marginal_avg_bound = None
+        marginal_avg_actual = None
+        marginal_avg_conservatism = None
+        marginal_violations = None
         if selected_bounds_arr.size:
             selected_cov = float(np.mean(selected_actuals_arr <= selected_bounds_arr))
             selected_violations = int(np.sum(selected_actuals_arr > selected_bounds_arr))
             avg_bound = float(np.mean(selected_bounds_arr))
             avg_actual = float(np.mean(selected_actuals_arr))
+            avg_conservatism = float(np.mean(selected_bounds_arr - selected_actuals_arr))
         if all_bounds_arr.size:
             marginal_cov = float(np.mean(all_actuals_arr <= all_bounds_arr))
+            marginal_violations = int(np.sum(all_actuals_arr > all_bounds_arr))
+            marginal_avg_bound = float(np.mean(all_bounds_arr))
+            marginal_avg_actual = float(np.mean(all_actuals_arr))
+            marginal_avg_conservatism = float(np.mean(all_bounds_arr - all_actuals_arr))
         if selected_cov is not None:
             selected_gap = selected_cov - cfg.conformal_target_coverage
 
@@ -239,6 +249,10 @@ def evaluate_scheduler(
                     "nominal_coverage": cfg.conformal_target_coverage,
                     "empirical_coverage": marginal_cov,
                     "n": int(all_bounds_arr.size),
+                    "bound_violations": marginal_violations,
+                    "average_bound": marginal_avg_bound,
+                    "average_actual": marginal_avg_actual,
+                    "average_conservatism": marginal_avg_conservatism,
                 },
                 {
                     "split": split,
@@ -247,6 +261,10 @@ def evaluate_scheduler(
                     "nominal_coverage": cfg.conformal_target_coverage,
                     "empirical_coverage": selected_cov,
                     "n": int(selected_bounds_arr.size),
+                    "bound_violations": selected_violations,
+                    "average_bound": avg_bound,
+                    "average_actual": avg_actual,
+                    "average_conservatism": avg_conservatism,
                 },
             ]
         )
@@ -277,6 +295,7 @@ def evaluate_scheduler(
         selected_bound_violations=selected_violations,
         average_selected_bound=avg_bound,
         average_selected_actual=avg_actual,
+        average_selected_conservatism=avg_conservatism,
         drift_mean_abs_z=drift_summary["mean_abs_z"],
         drift_max_ks=drift_summary["max_ks"],
     )
@@ -389,6 +408,7 @@ def write_final_report(
             "assigned_tasks",
             "marginal_coverage",
             "selected_core_coverage",
+            "average_selected_conservatism",
             "drift_mean_abs_z",
             "drift_max_ks",
         ]
@@ -404,6 +424,7 @@ def write_final_report(
             "assigned_tasks",
             "marginal_coverage",
             "selected_core_coverage",
+            "average_selected_conservatism",
             "drift_mean_abs_z",
             "drift_max_ks",
         ]
@@ -428,6 +449,7 @@ def write_final_report(
     )
     student_summary = _student_summary_markdown(cfg, metrics, coverage, conformal_diagnostics)
     conformal_section = _conformal_diagnostics_markdown(cfg, conformal_diagnostics)
+    bound_conservatism = _bound_conservatism_markdown(model_metrics, metrics, coverage)
     scheduler_comparison = _model_scheduler_comparison_markdown(cfg, metrics, coverage)
     preset_results = _preset_results_markdown(reports_dir)
     stress_sweep = _optional_markdown_file(reports_dir / "stress_sweep_summary.md", "## Stress Sweep Result")
@@ -451,6 +473,13 @@ noisy sensors, action-conditioned datasets, point/quantile/conformal models,
 scheduler baselines, fair ID/OOD evaluation, plots, and reports.
 
 Current run preset: **{cfg.preset}**.
+
+Evaluation workload parameters:
+
+| Split | arrival rate | task mix (low, medium, high) | burst probability | burst extra rate | power scale | duration scale |
+|---|---:|---|---:|---:|---:|---:|
+| ID | {cfg.id_arrival_rate:g} | {cfg.id_task_mix} | {cfg.id_burst_probability:g} | {cfg.id_burst_extra_rate:g} | {cfg.id_power_scale:g} | {cfg.id_duration_scale:g} |
+| OOD | {cfg.ood_arrival_rate:g} | {cfg.ood_task_mix} | {cfg.ood_burst_probability:g} | {cfg.ood_burst_extra_rate:g} | {cfg.ood_power_scale:g} | {cfg.ood_duration_scale:g} |
 
 ## Prediction Target
 
@@ -477,6 +506,8 @@ simulation reference, not as a deployable sparse-sensor scheduler.
 {md_table(model_metrics)}
 
 {conformal_section}
+
+{bound_conservatism}
 
 ## ID Scheduler Metrics
 
@@ -541,9 +572,9 @@ section below for plain-English explanations). Regenerate any time with
 ## Limitations
 
 This is a research MVP, not a validated chip thermal model. It does not include
-HotSpot, OpenROAD, chiplets, DVFS, GNNs, active sensing, FPGA logic, or a web
-dashboard. The conformal guarantee is marginal on calibration-like data and is
-not a formal OOD safety guarantee.
+HotSpot, OpenROAD, chiplets, DVFS, GNNs, active sensing, FPGA logic, production
+hardware integration, or a production web application. The conformal guarantee
+is marginal on calibration-like data and is not a formal OOD safety guarantee.
 """
     (reports_dir / "final_report.md").write_text(report, encoding="utf-8")
 
@@ -622,8 +653,8 @@ Schedulers with at least one hotspot violation in any evaluated split: {", ".joi
 Schedulers with zero hotspot violations across all evaluated splits: {", ".join(safe) if safe else "none"}.
 Conformal status: {conformal_worked} What is not proven yet: this is not real
 silicon validation, and OOD coverage is not guaranteed. The next experiment is
-the challenging preset plus multiseed validation, which checks whether scheduler
-choice matters in a harder but non-saturating regime.
+multiseed validation with the stressed evaluation settings, which checks whether
+scheduler choice remains stable across seeds.
 
 | Result verdict | Status |
 |---|---|
@@ -649,6 +680,70 @@ Target coverage, quantile alpha, conformal correction, calibration sample count,
 and before/after empirical coverage are reported explicitly below.
 
 {table}{note}
+"""
+
+
+def _bound_conservatism_markdown(
+    model_metrics: pd.DataFrame,
+    scheduler_metrics: pd.DataFrame,
+    coverage: pd.DataFrame,
+) -> str:
+    model_id = _model_metric_value(model_metrics, "test_id", "conformal_upper", "average_conservatism")
+    marginal_id = _coverage_metric_value(
+        coverage,
+        "id",
+        "marginal_all_candidates_on_visited_states",
+        "average_conservatism",
+    )
+    selected_id = _metrics_value(
+        scheduler_metrics,
+        "id",
+        "conformal_upper_bound",
+        "average_selected_conservatism",
+    )
+    selected_bound = _metrics_value(
+        scheduler_metrics,
+        "id",
+        "conformal_upper_bound",
+        "average_selected_bound",
+    )
+    selected_actual = _metrics_value(
+        scheduler_metrics,
+        "id",
+        "conformal_upper_bound",
+        "average_selected_actual",
+    )
+    rows = pd.DataFrame(
+        [
+            {
+                "quantity": "ID test conformal upper - true outcome, all saved test predictions",
+                "average_c": model_id,
+            },
+            {
+                "quantity": "ID rollout conformal upper - realized outcome, all candidates on visited states",
+                "average_c": marginal_id,
+            },
+            {
+                "quantity": "ID rollout conformal upper - realized outcome, selected scheduler core",
+                "average_c": selected_id,
+            },
+            {
+                "quantity": "ID selected average conformal upper",
+                "average_c": selected_bound,
+            },
+            {
+                "quantity": "ID selected average realized outcome",
+                "average_c": selected_actual,
+            },
+        ]
+    )
+    return f"""## Bound Conservatism Audit
+
+Positive values mean the calibrated upper bound is above the true realized
+future peak. Large positive values mean the bound is conservative and may be too
+loose to strongly differentiate candidate cores.
+
+{rows.to_markdown(index=False)}
 """
 
 
@@ -772,6 +867,40 @@ def _diagnostic_value(diagnostics: pd.DataFrame, metric: str) -> float | None:
     if rows.empty:
         return None
     return float(rows["value"].iloc[0])
+
+
+def _model_metric_value(model_metrics: pd.DataFrame, split: str, model: str, metric: str) -> float | None:
+    if model_metrics.empty:
+        return None
+    required = {"split", "model", "metric", "value"}
+    if not required.issubset(model_metrics.columns):
+        return None
+    rows = model_metrics[
+        (model_metrics["split"] == split)
+        & (model_metrics["model"] == model)
+        & (model_metrics["metric"] == metric)
+    ]
+    if rows.empty:
+        return None
+    return float(rows["value"].iloc[0])
+
+
+def _coverage_metric_value(coverage: pd.DataFrame, split: str, coverage_type: str, column: str) -> float | None:
+    if coverage.empty or column not in coverage.columns:
+        return None
+    rows = coverage[(coverage["split"] == split) & (coverage["coverage_type"] == coverage_type)]
+    if rows.empty or pd.isna(rows[column].iloc[0]):
+        return None
+    return float(rows[column].iloc[0])
+
+
+def _metrics_value(metrics: pd.DataFrame, split: str, scheduler: str, column: str) -> float | None:
+    if metrics.empty or column not in metrics.columns:
+        return None
+    rows = metrics[(metrics["split"] == split) & (metrics["scheduler"] == scheduler)]
+    if rows.empty or pd.isna(rows[column].iloc[0]):
+        return None
+    return float(rows[column].iloc[0])
 
 
 def _conformal_advantage_verdict(metrics: pd.DataFrame, coverage: pd.DataFrame) -> str:

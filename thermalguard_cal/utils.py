@@ -67,6 +67,7 @@ class RunSummary:
     selected_bound_violations: int | None = None
     average_selected_bound: float | None = None
     average_selected_actual: float | None = None
+    average_selected_conservatism: float | None = None
     drift_mean_abs_z: float | None = None
     drift_max_ks: float | None = None
 
