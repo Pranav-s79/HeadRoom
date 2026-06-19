@@ -8,3 +8,7 @@ outputs/figures/*.png
 outputs/reports/*.csv
 outputs/reports/*.json
 outputs/reports/final_report.md
+
+# local dev environment
+.venv/
+.streamlit/credentials.toml

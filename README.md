@@ -1,220 +1,90 @@
-# ThermalGuard-Cal
+# HeadRoom
+> Calibrated upper-bound thermal scheduling for many-core chips.
 
-ThermalGuard-Cal is a modular Python research MVP for conformal upper-bound
-thermal scheduling on a simulated 4x4 many-core chip. It compares random,
-round-robin, observed coolest-core, oracle coolest-core, trend-aware,
-point-prediction, uncalibrated quantile, and conformal upper-bound schedulers.
+HeadRoom (package `thermalguard_cal`) is a simulation-based study of **conformalized
+thermal scheduling**: it predicts a *calibrated upper bound* on a chip's near-future peak
+temperature from sparse, noisy sensors, and places work on the lowest-risk core to avoid
+hotspot violations — then honestly measures where those calibration guarantees hold and where
+they break.
 
-The model target is **future peak chip temperature over the prediction
-horizon**, a global whole-chip quantity. It is not the candidate core's own
-future temperature. Selected-core coverage therefore means coverage of the
-global outcome that results from a placement choice.
+![HeadRoom pipeline](portfolio_assets/architecture.png)
 
-## Why Calibrated Upper Bounds
+## What it does
+A stochastic 4×4 (16-core) simulator advances a chip with heat gain, ambient cooling, and
+diffusion, but only **4 corner cores carry noisy sensors**, so the scheduler never sees the
+true chip state. Sensor-only features (128 of them, no true-temperature leakage) feed a point
+predictor (random forest) and an upper-quantile model (gradient boosting, q = 0.90), and a
+one-sided **conformal calibrator (CQR)** widens the quantile into a calibrated ceiling on peak
+temperature. Eight schedulers — from random/round-robin through sparse-sensor heuristics to the
+conformal scheduler — are replayed on in-distribution and out-of-distribution workloads, and
+the pipeline reports peak temperature, hotspot violations, marginal coverage, selected-core
+coverage, and policy-induced distribution drift.
 
-Point predictions can underestimate thermal risk. ThermalGuard-Cal trains an
-upper-quantile model and wraps it with one-sided conformal calibration, then
-uses calibrated upper bounds to choose task placements. The project separately
-measures marginal candidate coverage, selected-core coverage after choosing one
-candidate out of 16, and policy-induced feature distribution drift.
+## Key findings
+- **OOD safety.** Under out-of-distribution workload shift the naive coolest-core heuristic
+  overheats to **130 °C with 352 hotspot violations**, while the conformal scheduler holds
+  **72.7 °C with 0 violations** — at equal throughput (363 tasks completed by both).
+- **Calibration holds ID, collapses OOD.** On in-distribution workloads the calibrated bound
+  tracks the target (marginal coverage **93.7 %**, selected-core **93.9 %**); under OOD shift it
+  collapses to **55.5 %** (selected **54.9 %**), exactly as conformal theory predicts when
+  exchangeability between calibration and deployment is violated.
+- **The correction lifts under-covering models to target.** Where the base quantile model
+  under-covers the calibration set, conformal widens the bound to reach 90 % (e.g. challenging
+  seed: **64.9 % → 90.1 %, +1.8 °C**). It is **0 °C when the base model is already conservative**
+  — conformal only ever widens bounds, never shrinks them.
+- **No measurable selection-bias gap on ID.** Selected-core coverage (93.9 %) tracked marginal
+  coverage (93.7 %) closely, so choosing one core out of 16 did not introduce a selection bias
+  here.
 
-## Install
+![Coverage and calibration summary](portfolio_assets/research_summary.png)
 
+## What this does NOT claim
+- Not validated on real GPU/silicon hardware (simulation only).
+- Not an invention of thermal-aware scheduling (established prior work).
+- Conformal guarantees are marginal and do **not** hold under arbitrary distribution shift.
+
+## Quick start
 ```bash
+# 1. install dependencies
 python -m pip install -r requirements.txt
-```
 
-## Quick Mode
+# 2. get the pre-trained models, metrics, and figures (fast path)
+unzip -o outputs.zip            # populates outputs/{models,reports,figures}
+#    ...or regenerate everything from scratch:
+# python run_all.py --quick
 
-Quick mode is the default and is intended for development and smoke tests.
-
-```bash
-python run_generate_data.py
-python run_train_models.py
-python run_evaluate_schedulers.py
-```
-
-Or run the whole pipeline:
-
-```bash
-python run_all.py --quick
-```
-
-The default preset is `normal`, which preserves the original quick-mode behavior:
-
-```bash
-python run_all.py --quick --preset normal
-```
-
-## Challenge Presets
-
-Preset options are `easy`, `normal`, `challenging`, and `stress`. The
-`challenging` preset is the recommended research-hardening setting: it increases
-reasonable workload and simulator stress so sparse-sensor heuristic schedulers
-can overheat while model-based schedulers remain comparable.
-
-```bash
-python run_all.py --quick --preset challenging
-python run_make_plots.py --preset challenging
-```
-
-Stress-sweep screening runs compact generate/train/evaluate loops for preset
-candidates and writes `outputs/reports/stress_sweep_results.csv`,
-`outputs/reports/stress_sweep_recommendations.csv`, and
-`outputs/reports/stress_sweep_summary.md`:
-
-```bash
-python run_stress_sweep.py
-```
-
-Five-seed challenging validation writes aggregate CSV/Markdown and figures:
-
-```bash
-python run_multiseed.py --preset challenging --quick --seeds 1 2 3 4 5
-```
-
-Primary multiseed outputs:
-
-- `outputs/reports/multiseed_metrics_challenging.csv`
-- `outputs/reports/multiseed_summary_challenging.md`
-- `outputs/figures/multiseed_hotspots_challenging.png`
-- `outputs/figures/multiseed_peak_temp_challenging.png`
-- `outputs/figures/multiseed_coverage_challenging.png`
-
-## Local Dashboard
-
-The lightweight Streamlit dashboard reads existing `outputs/` artifacts and can
-also run a local simulator replay for demo inspection. Start it from the project
-root:
-
-```bash
+# 3. launch the dashboard (from the project root)
 python run_dashboard.py
 ```
+The dashboard is a single page with a sticky summary bar, a synchronized dual-heatmap replay
+(conformal vs. naive coolest-core), and tabbed analysis (Scheduler Comparison · Calibration ·
+Research Findings · About). The sidebar has a one-click demo and PNG export buttons that write
+to `portfolio_assets/`.
 
-Equivalent direct command:
+> The bundled models in `outputs.zip` were pickled with scikit-learn 1.8.x. If unpickling fails
+> with a version error, install a matching version or regenerate via `python run_all.py --quick`.
 
-```bash
-streamlit run dashboard/app.py
+## Project structure
+```
+thermalguard_cal/      research pipeline (simulator, sensors, features, models,
+                       conformal calibrator, schedulers, evaluation) — do not edit for visuals
+dashboard/
+  app.py               single-page Streamlit dashboard (visual revamp)
+  figures.py           shared dark-theme matplotlib figure builders
+  generate_assets.py   pre-renders portfolio_assets/{architecture,research_summary}.png
+run_dashboard.py       dashboard entry point (keeps the sys.path → thermalguard_cal fix)
+run_all.py             end-to-end pipeline (data → train → evaluate → report)
+outputs/               generated data, models, figures, reports, multiseed + stress sweeps
+portfolio_assets/      static portfolio images (committed; rendered above)
+docs/                  tutorial, dashboard guide, metrics glossary, pitch prep
 ```
 
-Dashboard views:
-
-- Simulation Replay: 4x4 chip heatmap over time, sensor locations, selected
-  core, scheduler decision, point/quantile/conformal risk heatmaps, selected-core
-  detail table, plain-English decision explanation, jump controls, Demo Mode,
-  and peak temperature trace. Beginner mode is enabled by default.
-- Guided Tutorial: project walkthrough for reviewers learning the simulator,
-  prediction target, schedulers, conformal layer, and main caveats.
-- Pitch Prep: concise interview/portfolio pitch, supported claims, unsupported
-  claims, and likely reviewer questions.
-- Data Flow: how generated workloads become features, labels, trained models,
-  scheduler rollouts, reports, figures, and dashboard views.
-- Metric Explainer: plain-English definitions for peak temperature, hotspot
-  counts, coverage, selected-core coverage, and drift.
-- Result Verdict: conservative dashboard summary of what the current metrics do
-  and do not prove.
-- Results Explorer: scheduler metrics, model metrics, coverage metrics, and
-  executive figure.
-- Calibration View: conformal correction, calibration sample count, and
-  coverage before/after conformal calibration.
-- Scheduler Comparison: direct comparison of point prediction, uncalibrated
-  quantile, and conformal upper-bound schedulers.
-- Heatmap Comparison: existing ID/OOD heatmap figures and saved raw heatmap
-  snapshots.
-- Stress and Multiseed: stress sweep tables, multiseed aggregate metrics, and
-  multiseed figures.
-
-Simulation Replay can optionally write flat CSV replay logs under
-`outputs/replays/` from the dashboard.
-
-Recommended dashboard review flow:
-
-1. Run `python run_dashboard.py`.
-2. Open `Guided Tutorial`.
-3. Open `Simulation Replay`, keep Beginner mode enabled, and use the jump
-   buttons to inspect a decision, hotspot, or conformal-bound violation.
-4. Use `Pitch Prep`, `Metric Explainer`, and `Result Verdict` before claiming
-   project results externally.
-
-Written dashboard and portfolio notes are available under:
-
-- `docs/TUTORIAL.md`
-- `docs/DASHBOARD_GUIDE.md`
-- `docs/METRICS_GLOSSARY.md`
-- `docs/PITCH_PREP.md`
-- `outputs/portfolio_assets/portfolio_summary.md`
-- `outputs/portfolio_assets/recruiter_summary.md`
-- `outputs/portfolio_assets/supported_claims.md`
-- `outputs/portfolio_assets/unsupported_claims.md`
-
-## Visual Results
-
-`run_all.py` and `run_evaluate_schedulers.py` already write all figures and a
-"Visual Results" section in `outputs/reports/final_report.md`. To rebuild only
-the figures and that report section from the existing metric CSVs, without
-re-running the simulator or models:
-
-```bash
-python run_make_plots.py
-```
-
-This is a matplotlib-only, saved-files visual layer (no seaborn). It reads
-`outputs/reports/metrics_id.csv`, `metrics_ood.csv`,
-`coverage_metrics.csv`, `policy_drift_metrics.csv`, and `heatmap_snapshots.npz`,
-and writes the stable figure filenames below under `outputs/figures/`:
-
-| File | What it shows |
-|------|---------------|
-| `executive_summary.png` | One portfolio/README overview: OOD peak temperature, OOD hotspots, coverage collapse, and drift |
-| `peak_temperature_by_scheduler_id.png` / `_ood.png` | Peak temperature per scheduler vs the 85 C limit, ID and OOD |
-| `hotspot_violations_id.png` / `_ood.png` | Hotspot timestep counts per scheduler, ID and OOD |
-| `coverage_id_vs_ood.png` | Nominal vs marginal vs selected-core coverage, ID vs OOD |
-| `selected_core_coverage_gap.png` | Selected-core coverage minus nominal, ID vs OOD |
-| `policy_drift_id_vs_ood.png` | Policy-induced feature drift per scheduler, ID vs OOD |
-| `safety_vs_throughput_id.png` / `_ood.png` | Peak temperature vs completed tasks, one point per scheduler |
-| `heatmap_conformal_id.png` / `_ood.png` | Representative final 4x4 chip frame for the conformal scheduler |
-| `heatmap_comparison_ood.png` | Conformal vs a bad observed-sensor baseline under OOD |
-| `max_temperature_by_scheduler.png` | ID max-temperature traces over time |
-
-## Full Mode
-
-Full mode uses 200 train, 50 calibration, 50 ID test, and 50 OOD episodes with
-500 timesteps each. It is slower.
-
-```bash
-python run_all.py --full
-```
-
-## Outputs
-
-- `outputs/data/`: generated feature arrays, labels, metadata, feature names
-- `outputs/models/`: trained sklearn models and conformal calibrator
-- `outputs/figures/`: scheduler, coverage, drift, and heatmap plots
-- `outputs/reports/`: metrics CSVs, final report, and run manifest
-- `outputs/reports/research_review_bundle.zip`: source, tests, scripts,
-  reports, figures, config, manifests, summaries, and metrics for review
-
-## Interpreting Results
-
-Marginal coverage is measured across all candidate predictions on visited
-states. Selected-core coverage is measured after the conformal scheduler selects
-one placement. The gap between those values reflects scheduler selection
-effects. Policy-induced distribution drift is reported separately by comparing
-visited rollout features against the calibration feature distribution, even on
-in-distribution workloads.
-
-Conformal diagnostics are written to `outputs/reports/conformal_diagnostics.csv`.
-They explicitly report target coverage, quantile alpha, conformal correction,
-calibration sample count, and empirical coverage before and after conformal
-calibration for calibration, ID, and OOD splits. If the correction is zero, the
-quantile model was already conservative on the calibration split; if the
-correction is positive, conformal widened the upper bound.
-
-Use scheduler metrics conservatively. A conformal scheduler can improve
-coverage/calibration trust without winning peak temperature or hotspot counts.
-The final report includes a direct comparison of `point_prediction_rf`,
-`uncalibrated_quantile`, and `conformal_upper_bound` so the claim is not
-overstated.
-
-This is a simulation MVP, not real silicon validation. It does not include
-HotSpot, OpenROAD, chiplets, DVFS, GNNs, active sensing, or FPGA logic.
+## Research context
+Point predictions systematically underestimate tail thermal risk, so a scheduler that trusts
+them can place work onto a core that is about to spike. A *calibrated upper bound* instead
+carries a coverage guarantee: on exchangeable data the true outcome stays under the bound at
+the nominal rate. HeadRoom builds that bound with **Conformalized Quantile Regression**
+(Romano, Patterson & Candès, 2019) and measures coverage both marginally and **after the
+scheduler selects a core** — the regime studied by Jin & Ren (2024) on coverage after
+selection — so the reported guarantee reflects the decision path that actually ships, not just
+the average candidate.
