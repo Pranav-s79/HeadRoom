@@ -15,21 +15,8 @@ class WorkloadProfile:
     mix: tuple[float, float, float]
     burst_probability: float = 0.0
     burst_extra_rate: float = 0.0
-
-
-ID_PROFILE = WorkloadProfile(
-    name="id",
-    arrival_rate=0.38,
-    mix=(0.45, 0.40, 0.15),
-)
-
-OOD_PROFILE = WorkloadProfile(
-    name="ood",
-    arrival_rate=0.56,
-    mix=(0.22, 0.38, 0.40),
-    burst_probability=0.12,
-    burst_extra_rate=1.4,
-)
+    power_scale: float = 1.0
+    duration_scale: float = 1.0
 
 
 class WorkloadGenerator:
@@ -41,7 +28,27 @@ class WorkloadGenerator:
 
     @classmethod
     def for_split(cls, cfg: ThermalGuardConfig, split: str) -> "WorkloadGenerator":
-        return cls(cfg, OOD_PROFILE if split == "ood" else ID_PROFILE)
+        if split == "ood":
+            profile = WorkloadProfile(
+                name="ood",
+                arrival_rate=cfg.ood_arrival_rate,
+                mix=cfg.ood_task_mix,
+                burst_probability=cfg.ood_burst_probability,
+                burst_extra_rate=cfg.ood_burst_extra_rate,
+                power_scale=cfg.ood_power_scale,
+                duration_scale=cfg.ood_duration_scale,
+            )
+        else:
+            profile = WorkloadProfile(
+                name="id",
+                arrival_rate=cfg.id_arrival_rate,
+                mix=cfg.id_task_mix,
+                burst_probability=cfg.id_burst_probability,
+                burst_extra_rate=cfg.id_burst_extra_rate,
+                power_scale=cfg.id_power_scale,
+                duration_scale=cfg.id_duration_scale,
+            )
+        return cls(cfg, profile)
 
     def generate_episode(self, seed: int, episode_id: int) -> dict[int, list[Task]]:
         rng = np.random.default_rng(seed)
@@ -88,4 +95,6 @@ class WorkloadGenerator:
         if self.profile.name == "ood" and tier == 2:
             power *= rng.uniform(1.05, 1.25)
             duration = int(duration * rng.uniform(1.05, 1.25))
+        power *= self.profile.power_scale
+        duration = int(round(duration * self.profile.duration_scale))
         return float(power), max(1, int(duration))

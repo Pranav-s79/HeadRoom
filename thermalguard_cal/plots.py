@@ -7,6 +7,10 @@ import pandas as pd
 
 from .config import ThermalGuardConfig
 
+import matplotlib
+
+matplotlib.use("Agg")
+
 
 def make_all_plots(
     cfg: ThermalGuardConfig,
@@ -31,6 +35,7 @@ def make_all_plots(
     _plot_safety_vs_throughput(cfg, metrics, "id", figures / "safety_vs_throughput_id.png")
     _plot_safety_vs_throughput(cfg, metrics, "ood", figures / "safety_vs_throughput_ood.png")
     _plot_heatmap_snapshots(cfg, heatmap_snapshots or {}, figures)
+    _plot_executive_summary(cfg, metrics, coverage, figures / "executive_summary.png")
 
     # Backward-compatible figure names used by the initial MVP report/tests.
     _plot_peak_temperature_split(cfg, metrics, "id", figures / "peak_temperature_bar.png")
@@ -82,7 +87,15 @@ def visual_results_markdown(
     return f"""## Visual Results
 
 The figures below turn the raw CSV metrics into the main result story for the
-current quick run.
+current quick run. All figures live under `outputs/figures/` with stable
+filenames and can be regenerated independently with `python run_make_plots.py`.
+
+![Executive summary](../figures/executive_summary.png)
+
+The executive-summary figure is a single portfolio/README overview: OOD peak
+temperature by scheduler, OOD hotspot violations, the conformal coverage
+collapse from ID to OOD, and conformal policy drift. The detailed per-figure
+breakdown follows.
 
 ![ID peak temperature by scheduler](../figures/peak_temperature_by_scheduler_id.png)
 
@@ -131,9 +144,32 @@ ID remains too thermally easy.
 
 ![Conformal OOD heatmap](../figures/heatmap_conformal_ood.png)
 
+![Conformal vs observed-baseline OOD heatmaps](../figures/heatmap_comparison_ood.png)
+
 Representative 4x4 heatmaps show the final recorded chip-temperature frame for
-the conformal scheduler. The optional OOD comparison heatmap contrasts the
-conformal scheduler with a bad observed-sensor baseline when available.
+the conformal scheduler. The OOD comparison heatmap puts the conformal scheduler
+next to a bad observed-sensor baseline (`coolest_core_observed`), which chases
+cool sensor readings into a hotspot under the OOD workload.
+
+### What the figures say in plain English
+
+- **ID calibration holds.** On in-distribution workloads, conformal
+  selected-core coverage sits near the {cfg.conformal_target_coverage:g} nominal
+  target.
+- **OOD calibration breaks.** Under the shifted OOD workload, both marginal and
+  selected coverage drop well below nominal, so the conformal guarantee should
+  not be claimed as a formal OOD safety guarantee.
+- **Selected-core coverage is measured separately** from marginal candidate
+  coverage, because the scheduler picks one core out of 16 and that selection
+  step can move coverage on its own.
+- **Some observed-sensor baselines overheat badly in OOD.** Sparse-sensor
+  heuristics such as coolest-core-observed and trend-aware-observed run far past
+  the {cfg.thermal_limit:g} C limit on OOD workloads.
+- **Model-based schedulers avoid hotspots in this quick run**, staying under the
+  thermal limit without losing completed tasks.
+- **This quick run still needs harder presets.** ID is thermally easy here, so a
+  more challenging preset is needed to validate that the model-based advantage is
+  not just an artifact of an easy in-distribution regime.
 """
 
 
@@ -416,6 +452,94 @@ def _plot_heatmap_pair(
         ax.set_yticks(range(cfg.grid_size))
     fig.colorbar(image, ax=axes.ravel().tolist(), label="Temperature (C)")
     fig.savefig(path, dpi=170, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_executive_summary(
+    cfg: ThermalGuardConfig,
+    metrics: pd.DataFrame,
+    coverage: pd.DataFrame,
+    path: Path,
+) -> None:
+    """One portfolio/README figure: the OOD result story at a glance.
+
+    Four panels: OOD peak temperature by scheduler, OOD hotspot violations,
+    conformal coverage collapse (ID vs OOD), and conformal policy drift
+    (ID vs OOD).
+    """
+    import matplotlib.pyplot as plt
+
+    if metrics.empty:
+        return
+    ood = metrics[metrics["split"] == "ood"].copy()
+    if ood.empty:
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    fig.suptitle(
+        "ThermalGuard-Cal OOD results: model-based schedulers stay safe, "
+        "observed-sensor baselines overheat, conformal coverage collapses",
+        fontsize=13,
+    )
+
+    # Panel 1: OOD peak temperature by scheduler.
+    ax = axes[0, 0]
+    short = [name.replace("_", "\n") for name in ood["scheduler"]]
+    ax.bar(short, ood["peak_temperature"], color=_scheduler_colors(ood))
+    ax.axhline(
+        cfg.thermal_limit,
+        color="black",
+        linestyle="--",
+        linewidth=1.2,
+        label=f"{cfg.thermal_limit:g} C limit",
+    )
+    ax.set_ylabel("Peak temperature (C)")
+    ax.set_title("OOD peak temperature by scheduler")
+    ax.tick_params(axis="x", labelsize=7)
+    ax.legend(fontsize=8)
+
+    # Panel 2: OOD hotspot violations.
+    ax = axes[0, 1]
+    ax.bar(short, ood["hotspot_violations"], color=_scheduler_colors(ood))
+    ax.set_ylabel("Hotspot timestep count")
+    ax.set_title("OOD hotspot violations")
+    ax.tick_params(axis="x", labelsize=7)
+
+    # Panel 3: conformal coverage collapse, ID vs OOD.
+    ax = axes[1, 0]
+    id_sel = _coverage_value(coverage[coverage["split"] == "id"], "selected") if not coverage.empty else None
+    ood_sel = _coverage_value(coverage[coverage["split"] == "ood"], "selected") if not coverage.empty else None
+    values = [
+        cfg.conformal_target_coverage,
+        id_sel if id_sel is not None else np.nan,
+        ood_sel if ood_sel is not None else np.nan,
+    ]
+    bars = ax.bar(
+        ["Nominal\ntarget", "ID\nselected", "OOD\nselected"],
+        values,
+        color=["#444444", "#2b7a78", "#b23a48"],
+    )
+    ax.axhline(cfg.conformal_target_coverage, color="#444444", linestyle=":", linewidth=1)
+    ax.set_ylim(0, 1.05)
+    ax.set_ylabel("Empirical coverage")
+    ax.set_title("Conformal selected-core coverage: ID holds, OOD breaks")
+    for bar, value in zip(bars, values):
+        if not np.isnan(value):
+            ax.text(bar.get_x() + bar.get_width() / 2, value + 0.02, f"{value:.2f}", ha="center", fontsize=9)
+
+    # Panel 4: conformal policy drift, ID vs OOD.
+    ax = axes[1, 1]
+    conf = metrics[metrics["scheduler"] == "conformal_upper_bound"]
+    drift_vals = []
+    for split in ("id", "ood"):
+        row = conf[conf["split"] == split]
+        drift_vals.append(float(row["drift_mean_abs_z"].iloc[0]) if not row.empty else np.nan)
+    ax.bar(["ID", "OOD"], drift_vals, color=["#476c9b", "#b56576"])
+    ax.set_ylabel("Mean abs z-shift vs calibration")
+    ax.set_title("Conformal policy-induced drift: ID vs OOD")
+
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(path, dpi=170)
     plt.close(fig)
 
 

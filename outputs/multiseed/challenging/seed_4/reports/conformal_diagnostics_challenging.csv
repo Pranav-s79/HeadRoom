@@ -1,0 +1,12 @@
+metric,split,value
+target_coverage,all,0.9
+quantile_model_alpha,all,0.9
+conformal_correction,calibration,3.206759786671701
+conformal_quantile_level,calibration,0.9007009345794392
+calibration_samples,calibration,1712.0
+calibration_empirical_coverage_before_conformal,calibration,0.8376168224299065
+calibration_empirical_coverage_after_conformal,calibration,0.9007009345794392
+id_empirical_coverage_before_conformal,test_id,0.9959935897435898
+id_empirical_coverage_after_conformal,test_id,1.0
+ood_empirical_coverage_before_conformal,test_ood,0.591765873015873
+ood_empirical_coverage_after_conformal,test_ood,0.6592261904761905

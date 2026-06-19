@@ -47,6 +47,7 @@ class ChipState:
 class RunSummary:
     scheduler: str
     split: str
+    preset: str
     baseline_type: str
     uses_oracle: bool
     peak_temperature: float
@@ -59,6 +60,7 @@ class RunSummary:
     average_waiting_time: float
     assignment_load_std: float
     average_max_temperature: float
+    hit_max_temperature_cap: bool
     marginal_coverage: float | None = None
     selected_core_coverage: float | None = None
     selected_coverage_gap: float | None = None

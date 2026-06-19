@@ -1,0 +1,22 @@
+{
+  "calibration": {
+    "episodes": 2,
+    "features": 128,
+    "rows": 1760
+  },
+  "test_id": {
+    "episodes": 2,
+    "features": 128,
+    "rows": 1616
+  },
+  "test_ood": {
+    "episodes": 2,
+    "features": 128,
+    "rows": 2288
+  },
+  "train": {
+    "episodes": 4,
+    "features": 128,
+    "rows": 3536
+  }
+}

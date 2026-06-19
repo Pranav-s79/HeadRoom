@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import warnings
 
 import joblib
 import numpy as np
@@ -28,6 +29,12 @@ from sklearn.preprocessing import StandardScaler
 from .conformal import OneSidedConformalCalibrator, empirical_coverage
 from .config import ThermalGuardConfig, ensure_output_dirs
 from .dataset import load_split
+
+warnings.filterwarnings(
+    "ignore",
+    message="`sklearn.utils.parallel.delayed` should be used with `sklearn.utils.parallel.Parallel`.*",
+    category=UserWarning,
+)
 
 
 @dataclass
@@ -115,6 +122,33 @@ def train_and_save_models(cfg: ThermalGuardConfig) -> pd.DataFrame:
     joblib.dump(conformal, models_dir / "conformal_calibrator.joblib")
 
     rows = []
+    diagnostic_rows: list[dict[str, object]] = [
+        {
+            "metric": "target_coverage",
+            "split": "all",
+            "value": float(cfg.conformal_target_coverage),
+        },
+        {
+            "metric": "quantile_model_alpha",
+            "split": "all",
+            "value": float(cfg.quantile_alpha),
+        },
+        {
+            "metric": "conformal_correction",
+            "split": "calibration",
+            "value": float(conformal.correction),
+        },
+        {
+            "metric": "conformal_quantile_level",
+            "split": "calibration",
+            "value": float(conformal.q_level),
+        },
+        {
+            "metric": "calibration_samples",
+            "split": "calibration",
+            "value": int(conformal.n_calibration),
+        },
+    ]
     for split, X, y in (
         ("calibration", X_cal, y_cal),
         ("test_id", X_test, y_test),
@@ -126,9 +160,19 @@ def train_and_save_models(cfg: ThermalGuardConfig) -> pd.DataFrame:
         rows.extend(_metric_rows(split, "quantile_upper", y, q_pred, kind="upper"))
         conformal_upper = conformal.predict_upper(q_pred)
         rows.extend(_metric_rows(split, "conformal_upper", y, conformal_upper, kind="upper"))
+        diagnostic_rows.extend(_coverage_diagnostic_rows(split, y, q_pred, conformal_upper))
 
     metrics = pd.DataFrame(rows)
     metrics.to_csv(cfg.output_path / "reports" / "model_metrics.csv", index=False)
+    metrics.to_csv(cfg.output_path / "reports" / f"model_metrics_{cfg.preset}.csv", index=False)
+    pd.DataFrame(diagnostic_rows).to_csv(
+        cfg.output_path / "reports" / "conformal_diagnostics.csv",
+        index=False,
+    )
+    pd.DataFrame(diagnostic_rows).to_csv(
+        cfg.output_path / "reports" / f"conformal_diagnostics_{cfg.preset}.csv",
+        index=False,
+    )
     return metrics
 
 
@@ -187,6 +231,31 @@ def _metric_rows(split: str, model: str, y: np.ndarray, pred: np.ndarray, kind: 
             }
         )
     return rows
+
+
+def _coverage_diagnostic_rows(
+    split: str,
+    y: np.ndarray,
+    q_pred: np.ndarray,
+    conformal_upper: np.ndarray,
+) -> list[dict[str, object]]:
+    prefix = {
+        "calibration": "calibration",
+        "test_id": "id",
+        "test_ood": "ood",
+    }[split]
+    return [
+        {
+            "metric": f"{prefix}_empirical_coverage_before_conformal",
+            "split": split,
+            "value": empirical_coverage(y, q_pred),
+        },
+        {
+            "metric": f"{prefix}_empirical_coverage_after_conformal",
+            "split": split,
+            "value": empirical_coverage(y, conformal_upper),
+        },
+    ]
 
 
 def _rmse(y: np.ndarray, pred: np.ndarray) -> float:
