@@ -11,7 +11,6 @@ from .config import ThermalGuardConfig, ensure_output_dirs
 from .features import build_candidate_features, feature_names
 from .sensors import SensorModel
 from .simulator import ThermalSimulator
-from .utils import Task
 from .workloads import WorkloadGenerator
 
 

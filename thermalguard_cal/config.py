@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -144,8 +144,12 @@ def make_config(mode: str = "quick", preset: str = "normal", **overrides: Any) -
             test_episodes=50,
             ood_episodes=50,
             max_train_rows=120_000,
-            random_forest_estimators=96,
-            gradient_boosting_estimators=180,
+            # Full-mode hyperparameters reviewed in Work Stream 2c: the random
+            # forest gains from more trees (200-500 range), and the quantile GBR
+            # benefits from more low-learning-rate estimators. Depth/learning-rate
+            # are set in models.py and were left at their stable defaults.
+            random_forest_estimators=300,
+            gradient_boosting_estimators=240,
         )
     else:
         cfg = ThermalGuardConfig()

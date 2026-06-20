@@ -1,8 +1,11 @@
-numpy
-pandas
-scikit-learn
-matplotlib
-joblib
-pytest
-tabulate
-streamlit
+# HeadRoom (thermalguard_cal) — pinned to the versions the bundled models and
+# dashboard were validated against. The pickled model bundle is sensitive to the
+# scikit-learn version in particular, so keep that pin exact.
+numpy==1.26.4
+pandas==2.3.1
+scikit-learn==1.4.1.post1
+matplotlib==3.8.4
+joblib==1.2.0
+streamlit==1.47.0
+tabulate==0.9.0
+pytest==7.4.0
