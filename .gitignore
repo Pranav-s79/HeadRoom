@@ -1,14 +1,44 @@
+# Python
 __pycache__/
-.pytest_cache/
 *.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Generated pipeline outputs — regenerate with `python run_all.py` (see README
+# "How to regenerate"). Never tracked in git.
 outputs/data/*.npy
 outputs/data/*.csv
+outputs/data/*.json
 outputs/models/*.joblib
 outputs/figures/*.png
 outputs/reports/*.csv
 outputs/reports/*.json
-outputs/reports/final_report.md
+outputs/reports/*.md
+outputs/reports/*.npz
+outputs/reports/*.zip
+outputs/multiseed/
+outputs.zip
 
-# local dev environment
-.venv/
+# Streamlit local credentials (config.toml IS tracked; secrets are not)
 .streamlit/credentials.toml
+.streamlit/secrets.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Ad-hoc exported replay frames (the canonical 4 portfolio assets ARE tracked:
+# architecture, research_summary, comparison_chart, heatmap_demo)
+portfolio_assets/heatmap_frame_T*.png
+portfolio_assets/max_temp_chart.png
+
+# Catch-all: never track large generated binaries anywhere in the tree
+**/*.npy
+**/*.joblib
+!demo_data/**/*.npy
+!demo_data/**/*.joblib

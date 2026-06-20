@@ -1,0 +1,5 @@
+split,scheduler,coverage_type,nominal_coverage,empirical_coverage,n,bound_violations,average_bound,average_actual,average_conservatism
+id,conformal_upper_bound,marginal_all_candidates_on_visited_states,0.9,0.9987331081081081,4736,6,48.07311543964336,43.17658095744748,4.896534482195881
+id,conformal_upper_bound,selected_core_after_scheduler_selection,0.9,1.0,296,0,48.071861262172746,43.130428981430434,4.941432280742309
+ood,conformal_upper_bound,marginal_all_candidates_on_visited_states,0.9,0.5501190476190476,8400,3779,52.72272491470196,53.107707946945695,-0.38498303224373925
+ood,conformal_upper_bound,selected_core_after_scheduler_selection,0.9,0.5466666666666666,525,238,52.676018432942776,53.03659959021559,-0.3605811572728194
