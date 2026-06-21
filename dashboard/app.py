@@ -1,28 +1,25 @@
-"""HeadRoom dashboard — calibrated upper-bound thermal scheduling.
+"""HeadRoom Streamlit dashboard router.
 
-Multipage Streamlit app. This module is the router only: it injects the locked
-visual identity, initializes shared session state, and wires the four pages into
-the sidebar via ``st.navigation``. Each page lives in ``dashboard/pages/`` and
-renders independently:
-
-  1. Watch It Run    — the hero side-by-side replay (default landing page)
-  2. What We Found    — the 30-second results summary
-  3. Under the Hood   — methodology for reviewers
-  4. About            — what this is, and isn't
-
-All research logic lives in ``thermalguard_cal`` and is imported read-only by
-``dashboard/shared.py``. Every number shown is read from ``outputs/`` artifacts
-(or ``demo_data/`` via the hosted-demo entry point) — none are hardcoded.
-
-The historical sys.path fix (HeadRoom root before ``thermalguard_cal``) lives in
-``shared.py`` and is applied on import below.
+This file owns only the Streamlit page shell. Presentation helpers live in
+dashboard/shared.py and dashboard/figures.py; research logic remains in
+thermalguard_cal and is imported read-only.
 """
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import streamlit as st
 
-import shared as S  # applies the sys.path fix on import
+DASHBOARD_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = DASHBOARD_DIR.parent
+for path in (PROJECT_ROOT, DASHBOARD_DIR):
+    path_text = str(path)
+    if path_text not in sys.path:
+        sys.path.insert(0, path_text)
+
+import shared as S
 
 
 def main() -> None:
@@ -32,10 +29,23 @@ def main() -> None:
     S.sidebar_brand()
 
     pages = [
-        st.Page("pages/1_Watch_It_Run.py", title="Watch It Run", icon="▶", default=True),
-        st.Page("pages/2_What_We_Found.py", title="What We Found", icon="📊"),
-        st.Page("pages/3_Under_The_Hood.py", title="Under the Hood", icon="🔧"),
-        st.Page("pages/4_About.py", title="About", icon="ℹ"),
+        st.Page(
+            str(DASHBOARD_DIR / "pages" / "1_Watch_It_Run.py"),
+            title="Watch It Run",
+            default=True,
+        ),
+        st.Page(
+            str(DASHBOARD_DIR / "pages" / "2_What_We_Found.py"),
+            title="What We Found",
+        ),
+        st.Page(
+            str(DASHBOARD_DIR / "pages" / "3_Under_The_Hood.py"),
+            title="Under the Hood",
+        ),
+        st.Page(
+            str(DASHBOARD_DIR / "pages" / "4_About.py"),
+            title="About",
+        ),
     ]
     nav = st.navigation(pages, position="sidebar")
     nav.run()
