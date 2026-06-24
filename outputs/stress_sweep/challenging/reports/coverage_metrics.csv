@@ -1,5 +1,0 @@
-split,scheduler,coverage_type,nominal_coverage,empirical_coverage,n
-id,conformal_upper_bound,marginal_all_candidates_on_visited_states,0.9,1.0,1200
-id,conformal_upper_bound,selected_core_after_scheduler_selection,0.9,1.0,75
-ood,conformal_upper_bound,marginal_all_candidates_on_visited_states,0.9,0.7662259615384616,1664
-ood,conformal_upper_bound,selected_core_after_scheduler_selection,0.9,0.7596153846153846,104
